@@ -350,26 +350,9 @@ class Monitor(object):
                 self.consumed.callback(False)
                 return False
             # check that the batch is consistent with the eventual pending_sth
-            d = self._verify(self._partial_sth, self._unverified_tree, result)
-            d.addErrback(self._verify_errback)
+            d = self._monitor._verify_new_tree(self._partial_sth, self._unverified_tree, result)
             self.consumed.callback(lambda x: d)
             return True
-
-        def _verify_errback(self, failure):
-            failure.trap(error.VerifyError)
-            self._monitor._update_unverified_data(self._monitor._verified_tree)
-            return False
-
-        def _verify_log(self, result, new_tree, verified_entries):
-            logging.info("Verified %d entries" % verified_entries)
-            self._monitor._set_verified_tree(new_tree)
-            return True
-
-        def _verify(self, partial_sth, new_tree, entries_count):
-            d = self._monitor._verify_consistency(partial_sth,
-                                                  self._pending_sth)
-            d.addCallback(self._verify_log, new_tree, entries_count)
-            return d
 
         def consume(self, entry_batch):
             self._fetched += len(entry_batch)
@@ -421,7 +404,32 @@ class Monitor(object):
         if wanted_entries > last_parsed_size:
             return self._fetch_entries(last_parsed_size, wanted_entries-1)
         else:
-            return self.__fired_deferred(True)
+            return self._verify_entries()
+
+    def _verify_entries(self):
+        projected_sth, new_tree = self._compute_projected_sth_from_tree(
+                self._unverified_tree, ())
+
+        new_entries_count = new_tree.tree_size - self._verified_tree.tree_size
+
+        return self._verify_new_tree(projected_sth, new_tree, new_entries_count)
+
+    def _verify_new_tree(self, partial_sth, new_tree, new_entries_count):
+        d = self._verify_consistency(partial_sth, self.__state.pending_sth)
+
+        def set_verified_tree(result, new_tree, new_entries_count):
+            logging.info("Verified %d entries", (new_entries_count))
+            self._set_verified_tree(new_tree)
+            return True
+
+        d.addCallback(set_verified_tree, new_tree, new_entries_count)
+        d.addErrback(self._verify_new_tree_errback)
+        return d
+
+    def _verify_new_tree_errback(self, failure):
+            failure.trap(error.VerifyError)
+            self._update_unverified_data(self._verified_tree)
+            return False
 
     def _update_result(self, updates_result):
         if not updates_result:
