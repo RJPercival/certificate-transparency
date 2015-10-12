@@ -265,6 +265,30 @@ class MonitorTest(unittest.TestCase):
         d.addCallback(check_state)
         return d
 
+    def test_update_rolls_back_unverified_tree_on_scan_error(self):
+        client = FakeLogClient(self._NEW_STH)
+
+        m = self.create_monitor(client)
+        m._compute_projected_sth_from_tree = self._NEW_STH_compute_projected
+        m._scan_entries = mock.Mock(side_effect=ValueError("Boom!"))
+
+        def check_state(result):
+            # Check that we updated the state.
+            expected_state = client_pb2.MonitorState()
+            expected_state.verified_sth.CopyFrom(self._DEFAULT_STH)
+            expected_state.pending_sth.CopyFrom(self._NEW_STH)
+            # The unverified tree should be discarded, so that entries are
+            # re-fetched and re-consumed next time.
+            merkle.CompactMerkleTree().save(expected_state.verified_tree)
+            merkle.CompactMerkleTree().save(expected_state.unverified_tree)
+            self.verify_state(expected_state)
+            audited_sths = list(self.db.scan_latest_sth_range("log_server"))
+            self.assertEqual(audited_sths[0].audit.status, client_pb2.VERIFIED)
+            self.assertEqual(audited_sths[1].audit.status, client_pb2.UNVERIFIED)
+            self.assertEqual(len(audited_sths), 2)
+
+        return m.update().addCallback(self.assertFalse).addCallback(check_state)
+
     def test_update_call_sequence(self):
         # Test that update calls update_sth and update_entries in sequence,
         # and bails on first error, so we can test each of them separately.
@@ -461,6 +485,7 @@ class MonitorTest(unittest.TestCase):
                 lambda _: m._update_entries().addCallback(self.assertFalse)
                 ).addCallback(try_again_with_all_entries).addCallback(lambda _:
                     fake_fetch.assert_called_once_with(5, 19))
+
 
 if __name__ == "__main__":
     sys.argv = FLAGS(sys.argv)

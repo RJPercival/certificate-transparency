@@ -318,6 +318,12 @@ class Monitor(object):
                               ts_entry.entry_type))
         self.__report.scan_der_certs(der_certs)
 
+    def _scan_entries_eb(self, e):
+        logging.error("Failed to scan entries from %s: %s",
+                      self.servername, e)
+        self._update_unverified_data(self._verified_tree)
+        return e
+
     class EntryConsumer(object):
         """Consumer for log_client.EntryProducer.
 
@@ -362,6 +368,7 @@ class Monitor(object):
             scan = threads.deferToThread(
                     self._monitor._scan_entries,
                     enumerate(entry_batch, self._next_sequence_number))
+            scan.addErrback(self._monitor._scan_entries_eb)
             # calculate the hash for the latest fetched certs
             # TODO(ekasper): parse temporary data into permanent storage.
             self._partial_sth, self._unverified_tree = \
