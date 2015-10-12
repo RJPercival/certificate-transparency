@@ -67,7 +67,7 @@ class Monitor(object):
         self._unverified_tree.save(new_state.unverified_tree)
         self.__state_keeper.write(new_state)
         self.__state = new_state
-        logging.info("New state is %s" % new_state)
+        logging.info("New state is %s", new_state)
 
     @property
     def servername(self):
@@ -150,8 +150,8 @@ class Monitor(object):
             self.__db.store_sth(self.servername,
                                 self.__get_audited_sth(new_sth,
                                                        client_pb2.VERIFY_ERROR))
-            logging.error("Could not verify STH consistency: %s vs %s!!!\n%s" %
-                          (old_sth, new_sth, e))
+            logging.error("Could not verify STH consistency: %s vs %s!!!\n%s",
+                          old_sth, new_sth, e)
             raise
         else:
             self.__db.store_sth(self.servername,
@@ -173,8 +173,7 @@ class Monitor(object):
     def __update_sth_errback(self, failure):
         """Fired if there was network error or log server sent invalid
         response"""
-        logging.error("get-sth from %s failed: %s" % (self.servername,
-                                                     failure.getErrorMessage()))
+        logging.error("get-sth from %s failed: %s", self.servername, failure.getErrorMessage())
         return False
 
     def __update_sth_verify_consistency_before_accepting_eb(self, failure):
@@ -187,14 +186,14 @@ class Monitor(object):
     def __handle_old_sth_errback(self, failure, sth_response):
         failure.trap(error.VerifyError)
         logging.error("Received older STH which is older and inconsistent "
-                      "with current verified STH: %s vs %s. Error: %s" %
-                      (sth_response, self.__state.verified_sth, failure))
+                      "with current verified STH: %s vs %s. Error: %s",
+                      sth_response, self.__state.verified_sth, failure)
 
     def __handle_old_sth_callback(self, result, sth_response):
         logging.warning("Rejecting received "
                         "STH: timestamp is older than current verified "
-                        "STH: %s vs %s " %
-                        (sth_response, self.__state.verified_sth))
+                        "STH: %s vs %s ",
+                        sth_response, self.__state.verified_sth)
 
     def __update_sth_callback(self, sth_response):
         # If we got the same response as last time, do nothing.
@@ -209,7 +208,7 @@ class Monitor(object):
         # if we already have a verified STH.
         if self.__state.HasField("verified_sth"):
             if sth_response == self.__state.verified_sth:
-                logging.info("Ignoring already-verified STH: %s" %
+                logging.info("Ignoring already-verified STH: %s",
                              sth_response)
                 return True
             elif (sth_response.timestamp <
@@ -222,7 +221,7 @@ class Monitor(object):
         try:
             self.__verifier.verify_sth(sth_response)
         except (error.EncodingError, error.VerifyError):
-            logging.error("Invalid STH: %s" % sth_response)
+            logging.error("Invalid STH: %s", sth_response)
             return False
 
         # Verify consistency to catch the log trying to trick us
@@ -241,7 +240,7 @@ class Monitor(object):
         succeeded."""
         if self.__state.HasField("pending_sth"):
             return self.__fired_deferred(True)
-        logging.info("Fetching new STH")
+        logging.info("Fetching new STH for %s", self.servername)
         sth_response = self.__client.get_sth()
         sth_response.addCallback(self.__update_sth_callback)
         sth_response.addErrback(self.__update_sth_errback)
@@ -288,8 +287,8 @@ class Monitor(object):
             return "all night"
 
     def _fetch_entries_eb(self, e, consumer):
-        logging.error("get-entries from %s failed: %s" %
-                      (self.servername, e))
+        logging.error("get-entries from %s failed: %s",
+                      self.servername, e)
         consumer.done(None)
         return True
 
@@ -351,8 +350,8 @@ class Monitor(object):
             self.result = result
             if result < self._query_size:
                 logging.error("Failed to fetch all entries: expected tree size "
-                              "%d vs retrieved tree size %d" %
-                              (self._end + 1, self._next_sequence_number))
+                              "%d vs retrieved tree size %d",
+                              self._end + 1, self._next_sequence_number)
                 self.consumed.callback(False)
                 return False
             # check that the batch is consistent with the eventual pending_sth
@@ -362,8 +361,9 @@ class Monitor(object):
 
         def consume(self, entry_batch):
             self._fetched += len(entry_batch)
-            logging.info("Fetched %d entries (total: %d from %d)" %
-                         (len(entry_batch), self._fetched, self._query_size))
+            logging.info("Fetched %d entries from %s (total: %d from %d)",
+                         len(entry_batch), self._monitor.servername,
+                         self._fetched, self._query_size)
 
             scan = threads.deferToThread(
                     self._monitor._scan_entries,
@@ -384,9 +384,9 @@ class Monitor(object):
         Returns: Deferred that fires with boolean indicating whether fetching
         suceeded"""
         num_new_entries = end - start + 1
-        logging.info("Fetching %d new entries: this will take %s..." %
-                     (num_new_entries,
-                      self.__estimate_time(num_new_entries)))
+        logging.info("Fetching %d new entries: this will take %s...",
+                     num_new_entries,
+                     self.__estimate_time(num_new_entries))
         producer = self.__client.get_entries(start, end)
         consumer = Monitor.EntryConsumer(producer, self,
                                          self.__state.pending_sth,
@@ -446,7 +446,7 @@ class Monitor(object):
     def update(self):
         """Update log view. Returns True if the update succeeded, False if any
         error occurred."""
-        logging.info("Starting update for %s" % self.servername)
+        logging.info("Starting update for %s", self.servername)
         d = self._update_sth()
         d.addCallback(lambda sth_result: self._update_entries() if sth_result
                       else False)
