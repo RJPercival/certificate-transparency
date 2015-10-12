@@ -40,6 +40,10 @@ def dummy_compute_projected_sth(old_sth):
     old_sth.sha256_root_hash = tree.root_hash()
     return f
 
+# TODO(robpercival): This is a relatively complicated fake, and may hide subtle
+# bugs in how the Monitor interacts with the real EntryProducer. Using the real
+# EntryProducer with a FakeAgent, as async_log_client_test does, may be an
+# improvement.
 class FakeEntryProducer(object):
     def __init__(self, start, end, batch_size=None, throw=None):
         self._start = start
@@ -53,8 +57,7 @@ class FakeEntryProducer(object):
     @defer.deferredGenerator
     def produce(self):
         if self.throw:
-            self.done.errback(self.throw)
-            return
+            raise self.throw
         for i in range(self._start, self._end, self.batch_size):
             entries = []
             for j in range(i, min(i + self.batch_size, self._end)):
@@ -62,11 +65,10 @@ class FakeEntryProducer(object):
                 entry.leaf_input = "leaf_input-%d" % j
                 entry.extra_data = "extra_data-%d" % j
                 entries.append(entry)
-            d = defer.Deferred()
-            d.callback(entries)
+            d = self.consumer.consume(entries)
             wfd = defer.waitForDeferred(d)
             yield wfd
-            self.consumer.consume(wfd.getResult())
+            wfd.getResult()
             if self.stop:
                 break
 
@@ -74,11 +76,13 @@ class FakeEntryProducer(object):
             self.done.callback(self._end - self._start + 1)
 
     def startProducing(self, consumer):
+        self.stop = False
         self._start = self._real_start
         self._end = self._real_end
         self.consumer = consumer
         self.done = defer.Deferred()
-        self.produce()
+        d = self.produce()
+        d.addErrback(self.stopProducing)
         return self.done
 
     def change_range_after_start(self, start, end):
@@ -90,8 +94,10 @@ class FakeEntryProducer(object):
         self._real_start = start
         self._real_end = end
 
-    def stopProducing(self):
+    def stopProducing(self, failure=None):
         self.stop = True
+        if failure:
+            self.done.errback(failure)
 
 
 class FakeLogClient(object):
