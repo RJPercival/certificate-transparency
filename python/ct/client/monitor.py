@@ -329,7 +329,7 @@ class Monitor(object):
         When everything is consumed, consumed field fires a boolean indicating
         success of consuming.
         """
-        def __init__(self, producer, monitor, pending_sth, verified_tree):
+        def __init__(self, producer, monitor, pending_sth, unverified_tree):
             self._producer = producer
             self._monitor = monitor
             self._pending_sth = pending_sth
@@ -337,9 +337,9 @@ class Monitor(object):
             self._end = self._producer._end
             self._start = self._producer._start
             self._next_sequence_number = self._start
-            #unverified_tree is tree that will be built during consumption
             self._next_sequence_number = self._producer._start
-            self._unverified_tree = verified_tree
+            #unverified_tree is tree that will be built during consumption
+            self._unverified_tree = unverified_tree
             self.consumed = defer.Deferred()
             self._fetched = 0
 
