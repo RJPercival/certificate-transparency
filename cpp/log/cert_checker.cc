@@ -32,6 +32,13 @@ using util::error::Code;
 
 namespace cert_trans {
 
+namespace {
+// Remove this once BoringSSL is updated to provide this function.
+#ifndef BIO_eof
+int BIO_eof(BIO* bio) { return BIO_ctrl(bio, BIO_CTRL_EOF, 0, NULL); }
+#endif
+}
+
 bool CertChecker::LoadTrustedCertificates(const string& cert_file) {
   // A read-only BIO.
   ScopedBIO bio_in(BIO_new(BIO_s_file()));
